@@ -1,7 +1,8 @@
 use std::f32;
-use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+use cpal::FromSample;
 
 use crate::source::Spatial;
 use crate::stream::{OutputStreamHandle, PlayError};
@@ -56,7 +57,8 @@ impl SpatialSink {
     pub fn append<S>(&self, source: S)
     where
         S: Source + Send + 'static,
-        S::Item: Sample + Send + Debug,
+        f32: FromSample<S::Item>,
+        S::Item: Sample + Send,
     {
         let positions = self.positions.clone();
         let pos_lock = self.positions.lock().unwrap();
@@ -89,6 +91,24 @@ impl SpatialSink {
     #[inline]
     pub fn set_volume(&self, value: f32) {
         self.sink.set_volume(value);
+    }
+
+    /// Gets the speed of the sound.
+    ///
+    /// The value `1.0` is the "normal" speed (unfiltered input). Any value other than `1.0` will
+    /// change the play speed of the sound.
+    #[inline]
+    pub fn speed(&self) -> f32 {
+        self.sink.speed()
+    }
+
+    /// Changes the speed of the sound.
+    ///
+    /// The value `1.0` is the "normal" speed (unfiltered input). Any value other than `1.0` will
+    /// change the play speed of the sound.
+    #[inline]
+    pub fn set_speed(&self, value: f32) {
+        self.sink.set_speed(value)
     }
 
     /// Resumes playback of a paused sound.
@@ -137,5 +157,11 @@ impl SpatialSink {
     #[inline]
     pub fn empty(&self) -> bool {
         self.sink.empty()
+    }
+
+    /// Returns the number of sounds currently in the queue.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.sink.len()
     }
 }

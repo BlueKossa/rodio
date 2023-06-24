@@ -1,7 +1,7 @@
 //! Queue that plays sounds one after the other.
 
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{
     collections::VecDeque,
@@ -10,6 +10,11 @@ use std::{
 
 use crate::source::{Empty, Source, Zero};
 use crate::Sample;
+
+#[cfg(feature = "crossbeam-channel")]
+use crossbeam_channel::{unbounded as channel, Receiver, Sender};
+#[cfg(not(feature = "crossbeam-channel"))]
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 /// Builds a new queue. It consists of an input and an output.
 ///
@@ -70,12 +75,14 @@ where
     /// Adds a new source to the end of the queue.
     ///
     /// The `Receiver` will be signalled when the sound has finished playing.
+    ///
+    /// Enable the feature flag `crossbeam-channel` in rodio to use a `crossbeam_channel::Receiver` instead.
     #[inline]
     pub fn append_with_signal<T>(&self, source: T) -> Receiver<()>
     where
         T: Source<Item = S> + Send + 'static,
     {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = channel();
         self.next_sounds
             .lock()
             .unwrap()
@@ -90,8 +97,15 @@ where
         self.keep_alive_if_empty
             .store(keep_alive_if_empty, Ordering::Release);
     }
-}
 
+    /// Removes all the sounds from the queue. Returns the number of sounds cleared.
+    pub fn clear(&self) -> usize {
+        let mut sounds = self.next_sounds.lock().unwrap();
+        let len = sounds.len();
+        sounds.clear();
+        len
+    }
+}
 /// The output of the queue. Implements `Source`.
 pub struct SourcesQueueOutput<S> {
     // The current iterator that produces samples.
@@ -105,6 +119,7 @@ pub struct SourcesQueueOutput<S> {
     sample_cache: VecDeque<Option<S>>,
 }
 
+const THRESHOLD: usize = 512;
 impl<S> Source for SourcesQueueOutput<S>
 where
     S: Sample + Send + 'static,
@@ -121,12 +136,16 @@ where
         // If the `size_hint` is `None` as well, we are in the worst case scenario. To handle this
         // situation we force a frame to have a maximum number of samples indicate by this
         // constant.
-        const THRESHOLD: usize = 512;
 
         // Try the current `current_frame_len`.
         if let Some(val) = self.current.current_frame_len() {
             if val != 0 {
                 return Some(val);
+            } else if self.input.keep_alive_if_empty.load(Ordering::Acquire)
+                && self.input.next_sounds.lock().unwrap().is_empty()
+            {
+                // The next source will be a filler silence which will have the length of `THRESHOLD`
+                return Some(THRESHOLD);
             }
         }
 
@@ -210,13 +229,10 @@ where
             let mut next = self.input.next_sounds.lock().unwrap();
 
             if next.len() == 0 {
+                let silence = Box::new(Zero::<S>::new_samples(1, 44100, THRESHOLD)) as Box<_>;
                 if self.input.keep_alive_if_empty.load(Ordering::Acquire) {
                     // Play a short silence in order to avoid spinlocking.
-                    let silence = Zero::<S>::new(1, 44100); // TODO: meh
-                    (
-                        Box::new(silence.take_duration(Duration::from_millis(10))) as Box<_>,
-                        None,
-                    )
+                    (silence, None)
                 } else {
                     return Err(());
                 }

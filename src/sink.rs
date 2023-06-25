@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{
@@ -98,20 +97,6 @@ impl Sink {
             .periodic_access(Duration::from_millis(5), move |src| {
                 if controls.stopped.load(Ordering::SeqCst) {
                     src.stop();
-                } else {
-                    if let Some(seek_time) = controls.seek.lock().unwrap().take() {
-                        src.seek(seek_time).unwrap();
-                    }
-                    // Workaround for buffer underrun issue
-                    // If song is started while volume is set to 0, it causes a buffer underrun on alsa
-                    let mut new_factor = *controls.volume.lock().unwrap();
-                    if new_factor < 0.0001 {
-                        new_factor = 0.0001;
-                    }
-                    src.inner_mut().set_factor(new_factor);
-                    src.inner_mut()
-                        .inner_mut()
-                        .set_paused(controls.pause.load(Ordering::SeqCst));
                 }
                 {
                     let mut to_clear = controls.to_clear.lock().unwrap();
@@ -119,6 +104,9 @@ impl Sink {
                         let _ = src.inner_mut().skip();
                         *to_clear -= 1;
                     }
+                }
+                if let Some(seek_time) = controls.seek.lock().unwrap().take() {
+                    src.seek(seek_time).unwrap();
                 }
                 let amp = src.inner_mut().inner_mut();
                 amp.set_factor(*controls.volume.lock().unwrap());
@@ -190,7 +178,7 @@ impl Sink {
     pub fn pause(&self) {
         self.controls.pause.store(true, Ordering::SeqCst);
     }
-    
+
     /// Seeks to a specific time in the sink.
     pub fn seek(&self, seek_time: Duration) {
         *self.controls.seek.lock().unwrap() = Some(seek_time);

@@ -1,6 +1,5 @@
 //! Queue that plays sounds one after the other.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{
@@ -214,7 +213,7 @@ where
 
 impl<S> SourcesQueueOutput<S>
 where
-    S: Sample + Send + 'static,
+    S: Sample + Send +  'static,
 {
     // Called when `current` is empty and we must jump to the next element.
     // Returns `Ok` if the sound should continue playing, or an error if it should stop.
@@ -244,7 +243,7 @@ where
 
                     match (l, r) {
                         (Some(ll), Some(rr)) => {
-                            if ll.to_f32() == 0. && rr.to_f32() == 0. {
+                            if ll.to_f32().ok_or(())? == 0. && rr.to_f32().ok_or(())? == 0. {
                                 continue;
                             } else {
                                 self.sample_cache.push_back(l);

@@ -371,7 +371,7 @@ where
         match &mut self.0 {
             #[cfg(all(feature = "wav", not(feature = "symphonia-wav")))]
             DecoderImpl::Wav(source) => source.seek(time),
-            #[cfg(feature = "vorbis")]
+            #[cfg(all(feature = "vorbis", not(feature = "symphonia-vorbis")))]
             DecoderImpl::Vorbis(source) => source.seek(time),
             #[cfg(all(feature = "flac", not(feature = "symphonia-flac")))]
             DecoderImpl::Flac(source) => source.seek(time),
@@ -541,7 +541,7 @@ where
         match &mut self.0 {
             #[cfg(all(feature = "wav", not(feature = "symphonia-wav")))]
             DecoderImpl::Wav(source) => source.seek(time),
-            #[cfg(feature = "vorbis")]
+            #[cfg(all(feature = "vorbis", not(feature = "symphonia-vorbis")))]
             DecoderImpl::Vorbis(source) => source.seek(time),
             #[cfg(all(feature = "flac", not(feature = "symphonia-flac")))]
             DecoderImpl::Flac(source) => source.seek(time),

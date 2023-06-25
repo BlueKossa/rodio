@@ -65,7 +65,7 @@ where
 ///
 /// You can implement this trait on your own type as well if you wish so.
 ///
-pub trait Sample: CpalSample {
+pub trait Sample: CpalSample + num::ToPrimitive {
     /// Linear interpolation between two samples.
     ///
     /// The result should be equal to
